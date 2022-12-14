@@ -1,10 +1,15 @@
+from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+from diffusers import StableDiffusionPipeline
+from pydub import AudioSegment
+from PIL import Image
 import speech_recognition as sr
 import streamlit as st
 import torch
-from diffusers import StableDiffusionPipeline
-from PIL import Image
+import io
 
-MODEL_ID = "runwayml/stable-diffusion-v1-5"
+
+MODEL_IMAGE = "runwayml/stable-diffusion-v1-5"
+MODEL_ASR = "facebook/wav2vec2-large-960h-lv60-self"
 IMAGES_DIR = "../images/"
 SYSTEM = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -12,9 +17,19 @@ SYSTEM = "cuda" if torch.cuda.is_available() else "cpu"
 @st.cache(allow_output_mutation=True, suppress_st_warning=True)
 def get_pipe():
     if SYSTEM == "cuda":
-        return StableDiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.float16, revision="fp16").to(SYSTEM)
+        return StableDiffusionPipeline.from_pretrained(MODEL_IMAGE, torch_dtype=torch.float16, revision="fp16").to(SYSTEM)
     else:
-        return StableDiffusionPipeline.from_pretrained(MODEL_ID).to(SYSTEM)
+        return StableDiffusionPipeline.from_pretrained(MODEL_IMAGE).to(SYSTEM)
+
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def get_tokenizer():
+    return Wav2Vec2Processor.from_pretrained(MODEL_ASR)
+
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def get_input_model():
+    return Wav2Vec2ForCTC.from_pretrained(MODEL_ASR).to(SYSTEM)
 
 
 def model_image(txt, theme, steps, height, width):
@@ -25,17 +40,27 @@ def model_image(txt, theme, steps, height, width):
     return image
 
 
+def decode_record(tensor):
+    tokenizer = get_tokenizer()
+    model = get_input_model()
+    inputs = tokenizer(tensor, sampling_rate=16000, return_tensors='pt', padding='longest').input_values.to(SYSTEM)
+    logits = model(inputs).logits
+    tokens = torch.argmax(logits, axis=-1)
+    return tokenizer.batch_decode(tokens)
+
+
 def record_voice():
     try:
         listener = sr.Recognizer()
-        with sr.Microphone() as microphone:
+        with sr.Microphone(sample_rate=16000) as microphone:
             aud_msg = listener.listen(microphone)
-        txt_msg = listener.recognize_google(aud_msg, language='en-US')
+            data = io.BytesIO(aud_msg.get_wav_data())
+            clip = AudioSegment.from_file(data)
+            tensor = torch.FloatTensor(clip.get_array_of_samples())
+            text = decode_record(tensor)
     except Exception as e:
-        st.sidebar.exception(e)
-        st.sidebar.write("We gave you back kitty ʕ ᵔᴥᵔ ʔ")
-        txt_msg = "kitty"
-    return txt_msg.lower()
+        st.sidebar.error("Failed with error: {}".format(e))
+    return text[0].lower()
 
 
 def image_watermark(input_image, watermark_image, position):

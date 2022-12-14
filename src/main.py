@@ -1,8 +1,9 @@
-import streamlit as st
 from postcard_generator import record_voice
 from postcard_generator import get_postcard
-from PIL import Image
 from io import BytesIO
+from PIL import Image
+import streamlit as st
+
 
 PREVIEW_POSTCARD = "../images/result.png"
 
@@ -27,13 +28,14 @@ def main():
     st.sidebar.caption("Press the button and start talking text, to end recording stop talking")
 
     if "record" not in st.session_state:
-        st.session_state.record = "snowman"
+        st.session_state.record = ""
 
     if input_voice_button:
         st.session_state.record = record_voice()
-        if st.session_state.record == "kitty":
-            st.sidebar.write("Or you can try recording again V●ᴥ●V")
-    st.sidebar.write(f"Voice input: {st.session_state.record}")
+        if len(st.session_state.record):
+            st.sidebar.write(f"Voice input: {st.session_state.record}")
+        else:
+            st.sidebar.error("Nothing is recognized, try recording again (×﹏×)")
     theme = st.sidebar.selectbox(
         'Choose a postcard theme',
         ('Default', 'New Year and Merry Christmas', 'Happy Birthday', 'Happy Easter', 'Halloween'))
@@ -44,13 +46,13 @@ def main():
     if "postcard" not in st.session_state:
         default_postcard()
 
-    generate_postcard = st.sidebar.button('Generate postcard')
+    generate_postcard = st.sidebar.button('Generate postcard', disabled=not len(st.session_state.record))
     try:
         if generate_postcard:
             st.session_state.postcard = get_postcard(st.session_state.record, theme, steps, height, width)
             st.sidebar.success("Your postcard is ready (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧")
     except Exception as e:
-        st.sidebar.exception(e)
+        st.sidebar.error("Failed with error: {}".format(e))
 
     update_postcard_result(st.session_state.postcard)
 
