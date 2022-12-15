@@ -32,10 +32,10 @@ def main():
 
     if input_voice_button:
         st.session_state.record = record_voice()
-        if len(st.session_state.record):
-            st.sidebar.write(f"Voice input: {st.session_state.record}")
-        else:
+        if not len(st.session_state.record):
             st.sidebar.error("Nothing is recognized, try recording again (×﹏×)")
+    if len(st.session_state.record):
+        st.sidebar.write(f"Voice input: {st.session_state.record}")
     theme = st.sidebar.selectbox(
         'Choose a postcard theme',
         ('Default', 'New Year and Merry Christmas', 'Happy Birthday', 'Happy Easter', 'Halloween'))
